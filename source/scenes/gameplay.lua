@@ -1,3 +1,10 @@
+-- add at the very top of scenes/gameplay.lua
+import "CoreLibs/graphics"
+import "CoreLibs/sprites"
+import "CoreLibs/timer"
+
+local gfx = playdate.graphics
+
 local gfx = playdate.graphics
 
 GameplayScene = {}
@@ -62,31 +69,30 @@ end
 ----------------------------------------------------------------
 -- Full-screen sprite that draws the curved fishing line on top
 ----------------------------------------------------------------
+-- replace your entire LineSprite.new(scene) with this:
 local LineSprite = {}
 LineSprite.__index = LineSprite
+
 function LineSprite.new(scene)
-  local sp = gfx.sprite.new()
-  setmetatable(sp, LineSprite)
-  sp.scene = scene
-
-  -- Give the sprite a transparent 400x240 image so :draw() is called.
+  -- make a transparent full-screen image
   local blank = gfx.image.new(SCREEN_W, SCREEN_H, gfx.kColorClear)
-  sp:setImage(blank)
 
-  -- Top-left anchored at (0,0) so our curve (which uses screen coords) lines up.
-  sp:setCenter(0, 0)
+  -- pass it to the constructor so the sprite has size immediately
+  local sp = gfx.sprite.new(blank)
+  setmetatable(sp, LineSprite)
+
+  sp.scene = scene
+  sp:setCenter(0, 0)         -- top-left anchor so our screen coords line up
   sp:moveTo(0, 0)
-
-  sp:setZIndex(18)  -- between player (10) and bobber (20)
+  sp:setZIndex(18)           -- between player (10) and bobber (20)
   sp:add()
   return sp
 end
 
-
 function LineSprite:draw()
-  -- Delegate to the scene's curve renderer; this runs AFTER the background.
   if self.scene then self.scene:_drawCurvedLine() end
 end
+
 
 ----------------------------------------------------------------
 -- Scene
