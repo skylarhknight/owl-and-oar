@@ -36,3 +36,15 @@ end
 
 -- Start on the Title scene
 SceneManager:change(TitleScene.new(SceneManager))
+
+function playdate.BButtonDown()
+  if SceneManager.current and SceneManager.current.BButtonDown then
+    SceneManager.current:BButtonDown()
+  end
+end
+
+function playdate.cranked(change, acceleratedChange)
+  if SceneManager.current and SceneManager.current.cranked then
+    SceneManager.current:cranked(change, acceleratedChange)
+  end
+end
