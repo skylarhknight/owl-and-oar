@@ -4,6 +4,18 @@
 # notes for self
 playdate screen: 400x240
 
+## fixes
+maybe make different sprites for casting and reeling instead of custom line
+ripples for something on the line?
+
+
+### to make
+- sprite for waiting (precasting)
+- sprite for waiting (with line in water)
+- sprite for casting
+- sprite for pulling/reeling
+- sprite with nothing on the end?
+
 
 
 # Playdate Template

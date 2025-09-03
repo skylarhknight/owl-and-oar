@@ -1,9 +1,7 @@
--- add at the very top of scenes/gameplay.lua
+-- gameplay.lua
 import "CoreLibs/graphics"
 import "CoreLibs/sprites"
 import "CoreLibs/timer"
-
-local gfx = playdate.graphics
 
 local gfx = playdate.graphics
 
@@ -12,7 +10,7 @@ GameplayScene.__index = GameplayScene
 
 -- screen & layout
 local SCREEN_W, SCREEN_H = 400, 240
-local DOCK_X, DOCK_Y = 200, 70          -- player sprite center (you set these)
+local DOCK_X, DOCK_Y = 200, 70          -- player sprite center (tweak to your art)
 local WATER_X_MIN, WATER_X_MAX = 120, 360
 local WATER_Y = 180
 
@@ -31,7 +29,7 @@ local FISH = {
   {name="Salmon",        rarity="Medium", size={18,32}, strength=0.32, pattern="bursty"},
   {name="Golden Koi",    rarity="Rare",   size={14,26}, strength=0.45, pattern="rhythm"},
   {name="Ghost Fish",    rarity="Rare",   size={10,18}, strength=0.38, pattern="quick"},
-  {name="Flying Fish",   rarity="Rare",   size={8,14},  strength=0.28, pattern="bursty"},
+  {name="Flying Fish",   rarity="Rare",   size={8,14},  strength="0.28", pattern="bursty"},
   {name="Boot Fish",     rarity="Common", size={8,8},   strength=0.10, pattern="calm"},
   {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.22, pattern="jerky"},
   {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=0.50, pattern="spiky"},
@@ -48,51 +46,44 @@ local function slugify(name)
 end
 
 local function pickFish()
+  -- rarity by weight
   local r = math.random()
   local chosen = (r <= RARITY_WEIGHT.Common) and "Common"
               or (r <= RARITY_WEIGHT.Common + RARITY_WEIGHT.Medium) and "Medium" or "Rare"
+  -- pool
   local pool = {}
   for _, f in ipairs(FISH) do if f.rarity == chosen then table.insert(pool, f) end end
   local fish = pool[math.random(#pool)]
+  -- size roll
   local minS, maxS = fish.size[1], fish.size[2]
   local sz = math.random(minS, maxS)
   return {
     name     = fish.name,
     rarity   = fish.rarity,
     sizeIn   = sz,
-    strength = fish.strength or 0.3,
+    strength = tonumber(fish.strength) or 0.3,
     pattern  = fish.pattern  or "steady",
     iconSlug = slugify(fish.name),
   }
 end
 
 ----------------------------------------------------------------
--- Full-screen sprite that draws the curved fishing line on top
+-- Full-screen sprite that draws the fishing line AFTER background
 ----------------------------------------------------------------
--- replace your entire LineSprite.new(scene) with this:
-local LineSprite = {}
-LineSprite.__index = LineSprite
-
-function LineSprite.new(scene)
-  -- make a transparent full-screen image
+local function createLineSprite(scene)
   local blank = gfx.image.new(SCREEN_W, SCREEN_H, gfx.kColorClear)
-
-  -- pass it to the constructor so the sprite has size immediately
   local sp = gfx.sprite.new(blank)
-  setmetatable(sp, LineSprite)
-
   sp.scene = scene
-  sp:setCenter(0, 0)         -- top-left anchor so our screen coords line up
+  if sp.setCenter then sp:setCenter(0, 0) end
   sp:moveTo(0, 0)
-  sp:setZIndex(18)           -- between player (10) and bobber (20)
+  sp:setZIndex(18)                                 -- player=10, line=18, bobber=20
+  if sp.setAlwaysRedraw then sp:setAlwaysRedraw(true) end
+  function sp:draw()
+    if self.scene then self.scene:_drawSimpleLine() end
+  end
   sp:add()
   return sp
 end
-
-function LineSprite:draw()
-  if self.scene then self.scene:_drawCurvedLine() end
-end
-
 
 ----------------------------------------------------------------
 -- Scene
@@ -110,12 +101,12 @@ function GameplayScene.new(manager)
   s.player:setZIndex(10)
   s.player:add()
 
+  -- line sprite (must exist before bobber so it sits below bobber)
+  s.lineSprite = createLineSprite(s)
+
   s.bobberImg = gfx.image.new("images/bobber")
   s.bobber = nil
   s.bobberStartX, s.bobberStartY = nil, nil
-
-  -- line sprite (drawn on top of background)
-  s.lineSprite = LineSprite.new(s)
 
   -- state
   s.state = "idle"              -- idle | casting | waiting | hooking | reeling | catch_card
@@ -130,10 +121,10 @@ function GameplayScene.new(manager)
   s.fishDistance = 0            -- 1.0 -> 0.0 to land
   s.tension = 0
 
-  -- line curve params
-  s.lineStiffness = 0           -- 0=saggy, 1=taut
-  s.lineSagBase = 24            -- base sag pixels
-  s.fightOffsetX = 0            -- horizontal tug at curve midpoint
+  -- curve params (mostly unused now but harmless to keep for future)
+  s.lineStiffness = 0
+  s.lineSagBase = 24
+  s.fightOffsetX = 0
 
   -- UI
   s.statusText = nil
@@ -211,9 +202,6 @@ function GameplayScene:_releaseCast()
   local y = WATER_Y - math.floor(6 * p)
   self:_spawnBobber(x, y)
 
-  self.lineStiffness = 0.0
-  self.fightOffsetX = 0
-
   -- decide fish now; rarer fish usually mean a bit longer wait
   self:_choosePendingFish()
   local baseMs = math.random(1000, 6000) -- 1–6 s
@@ -249,6 +237,7 @@ function GameplayScene:_snapLine()
   self:_endCast("Line snapped!")
 end
 
+-- ends a cast, back to idle (miss, snap, or cancel)
 function GameplayScene:_endCast(msg)
   self.state = "idle"
   self:_clearTimers()
@@ -349,14 +338,17 @@ function GameplayScene:cranked(change, acceleratedChange)
     local forward  = math.max(0,  change) / 90
     local backward = math.max(0, -change) / 90
 
+    -- occasional tug left/right; otherwise relax toward center
     if math.random() < 0.08 then
       self.fightOffsetX = clamp(self.fightOffsetX + (math.random() - 0.5) * 8, -18, 18)
     else
       self.fightOffsetX = lerp(self.fightOffsetX, 0, 0.1)
     end
 
+    -- progress and slack
     self.fishDistance = clamp(self.fishDistance - forward * 0.03 + backward * 0.015, 0, 1)
 
+    -- tension: rises with reel speed & fish strength; decays over time and with slack
     local accel = math.abs(acceleratedChange) / 720
     local fishStrength = (self.currentFish and self.currentFish.strength) or 0.3
     local pullFactor = (forward > 0) and (forward * fishStrength) or 0
@@ -375,10 +367,9 @@ end
 -- Update / Draw
 ----------------------------------------------------------------
 function GameplayScene:update()
-  -- tighten line as tension rises
-  if self.state == "waiting" or self.state == "hooking" or self.state == "reeling" then
-    local desired = clamp(0.25 + self.tension * 0.75, 0, 1)
-    self.lineStiffness = lerp(self.lineStiffness, desired, 0.07)
+  -- keep the line sprite repainting while visible
+  if self.lineSprite and (self.state == "waiting" or self.state == "hooking" or self.state == "reeling") then
+    if self.lineSprite.markDirty then self.lineSprite:markDirty() end
   end
 
   -- during reeling, move bobber toward rod based on fishDistance
@@ -386,7 +377,7 @@ function GameplayScene:update()
     self:_moveBobberTowardRod(1.0 - self.fishDistance)
   end
 
-  -- HUD overlays (these are fine drawn here; they tend not to be erased)
+  -- HUD overlays
   if self.state == "casting" then
     self:_drawPowerBar()
   end
@@ -410,36 +401,23 @@ function GameplayScene:_drawPowerBar()
   gfx.drawTextAligned("Power", x + w/2, y - 12, kTextAlignment.center)
 end
 
--- quadratic Bézier curve for the line, with sag that stiffens
-function GameplayScene:_drawCurvedLine()
+-- SIMPLE STRAIGHT LINE between rod tip and bobber
+function GameplayScene:_drawSimpleLine()
   if not self.bobber then return end
+  local x0, y0 = DOCK_X + ROD_TIP_OFFSET_X, DOCK_Y + ROD_TIP_OFFSET_Y
+  local x1, y1 = self.bobber.x, self.bobber.y
 
-  local function rodTipXY_local()
-    return DOCK_X + ROD_TIP_OFFSET_X, DOCK_Y + ROD_TIP_OFFSET_Y
+  -- only show during active fishing phases
+  if self.state ~= "waiting" and self.state ~= "hooking" and self.state ~= "reeling" then
+    return
   end
-  local x0, y0 = rodTipXY_local()
-  local x2, y2 = self.bobber.x, self.bobber.y
 
-  local dx, dy = (x2 - x0), (y2 - y0)
-  local length = math.sqrt(dx*dx + dy*dy)
-  local baseSag = clamp(self.lineSagBase + length * 0.08, 10, 42)
-  local sag = baseSag * (1.0 - self.lineStiffness)
+  -- draw a crisp black line (rounded to integer coords)
+  local ax, ay = math.floor(x0 + 0.5), math.floor(y0 + 0.5)
+  local bx, by = math.floor(x1 + 0.5), math.floor(y1 + 0.5)
 
-  -- control point at midpoint + down by sag + left/right tug
-  local cx = (x0 + x2) * 0.5 + self.fightOffsetX
-  local cy = (y0 + y2) * 0.5 + sag
-
-  -- render curve as segments
-  local steps = 18
-  local prevx, prevy = x0, y0
-  for i = 1, steps do
-    local t = i / steps
-    local mt = 1 - t
-    local x = mt*mt*x0 + 2*mt*t*cx + t*t*x2
-    local y = mt*mt*y0 + 2*mt*t*cy + t*t*y2
-    gfx.drawLine(prevx, prevy, x, y)
-    prevx, prevy = x, y
-  end
+  gfx.setColor(gfx.kColorBlack)
+  gfx.drawLine(ax, ay, bx, by)
 end
 
 function GameplayScene:_drawTensionAndDistance()
