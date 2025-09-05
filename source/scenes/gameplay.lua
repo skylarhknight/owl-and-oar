@@ -11,11 +11,8 @@ GameplayScene.__index = GameplayScene
 -- screen & layout
 local SCREEN_W, SCREEN_H = 400, 240
 local DOCK_X, DOCK_Y = 200, 70          -- player sprite center (tweak to your art)
-local WATER_X_MIN, WATER_X_MAX = 120, 360
-local WATER_Y = 180
+local OWL_X, OWL_Y = 340, 40   -- adjust to where your owl should sit
 
--- rod tip offset from player sprite center (where line starts)
-local ROD_TIP_OFFSET_X, ROD_TIP_OFFSET_Y = 8, -20
 
 ----------------------------------------------------------------
 -- Fish catalog (starter set) with basic fight traits
@@ -24,6 +21,7 @@ local FISH = {
   {name="Bass",          rarity="Common", size={10,18}, strength=0.20, pattern="steady"},
   {name="Carp",          rarity="Common", size={12,22}, strength=0.18, pattern="gentle"},
   {name="Minnow",        rarity="Common", size={2,4},   strength=0.08, pattern="calm"},
+  {name="Shrimp",        rarity="Common", size={2,4},   strength=0.04, pattern="calm"},
   {name="Catfish",       rarity="Medium", size={16,30}, strength=0.35, pattern="steady"},
   {name="Trout",         rarity="Medium", size={12,20}, strength=0.30, pattern="jerky"},
   {name="Salmon",        rarity="Medium", size={18,32}, strength=0.32, pattern="bursty"},
@@ -34,12 +32,14 @@ local FISH = {
   {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.22, pattern="jerky"},
   {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=0.50, pattern="spiky"},
   {name="Space Jelly",   rarity="Rare",   size={7,12},  strength=0.12, pattern="quick"},
+  --{name="Electric Eel",  rarity="Rare",   size={8,14},  strength=0.28, pattern="bursty"},
+  {name="Sea Cucumber",  rarity="Rare",   size={4,6},  strength=0.02, pattern="calm"},
   {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.40, pattern="bursty"},
 }
 local RARITY_WEIGHT = { Common = 0.60, Medium = 0.30, Rare = 0.10 }
 
 -- utils
-local function clamp(v, a, b) if v<a then return a elseif v>b then return b else return v end end
+local function clamp(v, a, b) if v<a then return a elseif v>b then return v end return v end
 local function lerp(a,b,t) return a + (b-a)*t end
 local function slugify(name)
   return (name:lower():gsub("[^%w]+","_"):gsub("^_+",""):gsub("_+$",""):gsub("_+","_"))
@@ -61,28 +61,10 @@ local function pickFish()
     name     = fish.name,
     rarity   = fish.rarity,
     sizeIn   = sz,
-    strength = tonumber(fish.strength) or 0.3,
+    strength = fish.strength or 0.3,
     pattern  = fish.pattern  or "steady",
     iconSlug = slugify(fish.name),
   }
-end
-
-----------------------------------------------------------------
--- Full-screen sprite that draws the fishing line AFTER background
-----------------------------------------------------------------
-local function createLineSprite(scene)
-  local blank = gfx.image.new(SCREEN_W, SCREEN_H, gfx.kColorClear)
-  local sp = gfx.sprite.new(blank)
-  sp.scene = scene
-  if sp.setCenter then sp:setCenter(0, 0) end
-  sp:moveTo(0, 0)
-  sp:setZIndex(18)                                 -- player=10, line=18, bobber=20
-  if sp.setAlwaysRedraw then sp:setAlwaysRedraw(true) end
-  function sp:draw()
-    if self.scene then self.scene:_drawSimpleLine() end
-  end
-  sp:add()
-  return sp
 end
 
 ----------------------------------------------------------------
@@ -92,21 +74,22 @@ function GameplayScene.new(manager)
   local s = setmetatable({}, GameplayScene)
   s.manager = manager
 
-  -- art
+  -- background
   s.bg = gfx.image.new("images/bg_day")
 
-  s.playerImg = gfx.image.new("images/player")
-  s.player = gfx.sprite.new(s.playerImg)
+  -- load all player poses (fallback to images/player.png if missing)
+  s.poseImgs = {
+    neutral = gfx.image.new("images/player_neutral") or gfx.image.new("images/player"),
+    cast    = gfx.image.new("images/player_cast")    or gfx.image.new("images/player"),
+    fish    = gfx.image.new("images/player_fish")    or gfx.image.new("images/player"),
+    reel    = gfx.image.new("images/player_reel")    or gfx.image.new("images/player"),
+  }
+
+  -- player sprite (starts neutral)
+  s.player = gfx.sprite.new(s.poseImgs.neutral or gfx.image.new("images/player"))
   s.player:moveTo(DOCK_X, DOCK_Y)
   s.player:setZIndex(10)
   s.player:add()
-
-  -- line sprite (must exist before bobber so it sits below bobber)
-  s.lineSprite = createLineSprite(s)
-
-  s.bobberImg = gfx.image.new("images/bobber")
-  s.bobber = nil
-  s.bobberStartX, s.bobberStartY = nil, nil
 
   -- state
   s.state = "idle"              -- idle | casting | waiting | hooking | reeling | catch_card
@@ -115,16 +98,25 @@ function GameplayScene.new(manager)
   s.biteTimer = nil
   s.hookWindowTimer = nil
 
-  -- fish / reeling
+  -- owl (visual bite indicator)
+  s.owlImgs = {
+    neutral = gfx.image.new("images/owl_neutral") or gfx.image.new("images/owl"),
+    alert   = gfx.image.new("images/owl_alert")   or gfx.image.new("images/owl"),
+  }
+
+  s.owl = gfx.sprite.new(s.owlImgs.neutral or gfx.image.new("images/owl"))
+  s.owl:moveTo(OWL_X, OWL_Y)
+  s.owl:setZIndex(25)  -- above player (player is 10)
+  s.owl:add()
+
+  -- owl timers
+  s.owlAlertTimer = nil
+
+  -- fish / reeling vars
   s.pendingFish = nil
   s.currentFish = nil
   s.fishDistance = 0            -- 1.0 -> 0.0 to land
   s.tension = 0
-
-  -- curve params (mostly unused now but harmless to keep for future)
-  s.lineStiffness = 0
-  s.lineSagBase = 24
-  s.fightOffsetX = 0
 
   -- UI
   s.statusText = nil
@@ -153,56 +145,77 @@ function GameplayScene:leave()
 end
 
 ----------------------------------------------------------------
--- Helpers
+-- Helpers (pose swap, timers)
 ----------------------------------------------------------------
-local function rodTipXY()
-  return DOCK_X + ROD_TIP_OFFSET_X, DOCK_Y + ROD_TIP_OFFSET_Y
+function GameplayScene:_setPose(which)
+  local img = self.poseImgs[which]
+  if img and self.player and self.player.setImage then
+    self.player:setImage(img)
+  elseif img and self.player then
+    -- super-compat fallback: replace sprite if setImage isn't available
+    local x, y = self.player.x, self.player.y
+    local z = self.player:getZIndex()
+    self.player:remove()
+    self.player = gfx.sprite.new(img)
+    self.player:moveTo(x, y)
+    self.player:setZIndex(z or 10)
+    self.player:add()
+  end
 end
 
-function GameplayScene:_spawnBobber(x, y)
-  if self.bobber then self.bobber:remove(); self.bobber = nil end
-  self.bobber = gfx.sprite.new(self.bobberImg)
-  self.bobber:setZIndex(20)
-  self.bobber:moveTo(x, y)
-  self.bobber:add()
-  self.bobberStartX, self.bobberStartY = x, y
+function GameplayScene:_setOwlPose(which)
+  if not self.owl or not self.owlImgs then return end
+  local img = self.owlImgs[which]
+  if not img then return end
+
+  if self.owl.setImage then
+    self.owl:setImage(img)
+  else
+    -- Compatibility fallback if setImage isn't available on your SDK:
+    local x, y = self.owl.x, self.owl.y
+    local z = self.owl:getZIndex()
+    self.owl:remove()
+    self.owl = gfx.sprite.new(img)
+    self.owl:moveTo(x, y)
+    self.owl:setZIndex(z or 25)
+    self.owl:add()
+  end
 end
 
-function GameplayScene:_moveBobberTowardRod(t) -- t in [0..1], 0=start, 1=at rod
-  if not self.bobber or not self.bobberStartX then return end
-  local rx, ry = rodTipXY()
-  local x = lerp(self.bobberStartX, rx, t)
-  local y = lerp(self.bobberStartY, ry, t)
-  self.bobber:moveTo(x, y)
+-- Flash alert pose for `ms` milliseconds, then revert to neutral
+function GameplayScene:_owlFlashAlert(ms)
+  ms = ms or 1000
+  self:_setOwlPose("alert")
+  if self.owlAlertTimer then self.owlAlertTimer:remove() end
+  self.owlAlertTimer = playdate.timer.new(ms, function()
+    self:_setOwlPose("neutral")
+    self.owlAlertTimer = nil
+  end)
 end
 
-function GameplayScene:_removeBobber()
-  if self.bobber then self.bobber:remove(); self.bobber = nil end
-  self.bobberStartX, self.bobberStartY = nil, nil
-end
 
 function GameplayScene:_clearTimers()
   if self.biteTimer then self.biteTimer:remove(); self.biteTimer = nil end
   if self.hookWindowTimer then self.hookWindowTimer:remove(); self.hookWindowTimer = nil end
+  if self.owlAlertTimer then self.owlAlertTimer:remove(); self.owlAlertTimer = nil end
 end
 
 function GameplayScene:_choosePendingFish()
   self.pendingFish = pickFish()
 end
 
+----------------------------------------------------------------
+-- State transitions
+----------------------------------------------------------------
 function GameplayScene:_startCasting()
   self.state = "casting"
   self.power = 0
   self.lastCrankPos = playdate.getCrankPosition()
+  self:_setPose("cast")
 end
 
 function GameplayScene:_releaseCast()
-  local p = clamp(self.power, 0, 1)
-  local x = WATER_X_MIN + (WATER_X_MAX - WATER_X_MIN) * p
-  local y = WATER_Y - math.floor(6 * p)
-  self:_spawnBobber(x, y)
-
-  -- decide fish now; rarer fish usually mean a bit longer wait
+  -- choose fish; rarer fish usually wait a bit longer
   self:_choosePendingFish()
   local baseMs = math.random(1000, 6000) -- 1–6 s
   local rarityAdd = (self.pendingFish.rarity == "Rare" and 700)
@@ -210,12 +223,15 @@ function GameplayScene:_releaseCast()
   local waitMs = baseMs + rarityAdd
 
   self.state = "waiting"
+  self:_setPose("fish")
   self.biteTimer = playdate.timer.new(waitMs, function() self:_triggerBite() end)
 end
 
 function GameplayScene:_triggerBite()
   if self.state ~= "waiting" then return end
   self.state = "hooking"
+  self:_owlFlashAlert(1000)
+  -- (Pose stays "fish" during the hook window)
   local window = math.random(500, 1000)
   if self.pendingFish.rarity == "Rare" then window = math.floor(window * 0.8) end
   if self.pendingFish.pattern == "quick" then window = math.floor(window * 0.8) end
@@ -231,6 +247,7 @@ function GameplayScene:_hookFish()
   self.fishDistance = 1.0
   self.tension = 0.0
   self.state = "reeling"
+  self:_setPose("reel")
 end
 
 function GameplayScene:_snapLine()
@@ -243,7 +260,8 @@ function GameplayScene:_endCast(msg)
   self:_clearTimers()
   self.pendingFish = nil
   self.currentFish = nil
-  self:_removeBobber()
+  self:_setPose("neutral")
+  self:_setOwlPose("neutral")
   if msg then
     self.statusText = msg
     playdate.timer.new(1000, function() self.statusText = nil end)
@@ -252,10 +270,10 @@ end
 
 function GameplayScene:_finishCatch()
   self:_clearTimers()
-  self:_removeBobber()
   self.catchInfo = self.currentFish or pickFish()
   self.currentFish = nil
   self.state = "catch_card"
+  -- (Keep "reel" pose during the card; switch to neutral when it closes)
   self.catchCardTimer = playdate.timer.new(1600, function()
     if self.state == "catch_card" then self:_closeCatchCard() end
   end)
@@ -265,14 +283,16 @@ function GameplayScene:_closeCatchCard()
   if self.catchCardTimer then self.catchCardTimer:remove(); self.catchCardTimer = nil end
   self.catchInfo = nil
   self.state = "idle"
+  self:_setPose("neutral")
 end
 
 ----------------------------------------------------------------
--- Icon loader: prefers icons/, falls back to fish/, scales into 24×24
+-- Icon loader (24x24 fit)
 ----------------------------------------------------------------
 function GameplayScene:_getIconBySlug(slug, box)
   box = box or 24
   if not slug or slug == "" then return nil end
+  self.iconCache = self.iconCache or {}
   local key = slug .. "#" .. tostring(box)
   if self.iconCache[key] ~= nil then return self.iconCache[key] end
 
@@ -332,27 +352,20 @@ end
 function GameplayScene:cranked(change, acceleratedChange)
   if self.state == "casting" then
     local delta = math.abs(change) / 180    -- tune sensitivity
-    self.power = clamp(self.power + delta, 0, 1)
+    self.power = math.min(1, self.power + delta)
 
   elseif self.state == "reeling" then
     local forward  = math.max(0,  change) / 90
     local backward = math.max(0, -change) / 90
 
-    -- occasional tug left/right; otherwise relax toward center
-    if math.random() < 0.08 then
-      self.fightOffsetX = clamp(self.fightOffsetX + (math.random() - 0.5) * 8, -18, 18)
-    else
-      self.fightOffsetX = lerp(self.fightOffsetX, 0, 0.1)
-    end
-
     -- progress and slack
-    self.fishDistance = clamp(self.fishDistance - forward * 0.03 + backward * 0.015, 0, 1)
+    self.fishDistance = math.max(0, math.min(1, self.fishDistance - forward * 0.03 + backward * 0.015))
 
     -- tension: rises with reel speed & fish strength; decays over time and with slack
     local accel = math.abs(acceleratedChange) / 720
     local fishStrength = (self.currentFish and self.currentFish.strength) or 0.3
     local pullFactor = (forward > 0) and (forward * fishStrength) or 0
-    self.tension = clamp(self.tension + pullFactor * 0.25 + accel * 0.15 - 0.02 - backward * 0.10, 0, 1)
+    self.tension = math.max(0, math.min(1, self.tension + pullFactor * 0.25 + accel * 0.15 - 0.02 - backward * 0.10))
 
     if self.tension >= 1 then
       self:_snapLine(); return
@@ -367,16 +380,6 @@ end
 -- Update / Draw
 ----------------------------------------------------------------
 function GameplayScene:update()
-  -- keep the line sprite repainting while visible
-  if self.lineSprite and (self.state == "waiting" or self.state == "hooking" or self.state == "reeling") then
-    if self.lineSprite.markDirty then self.lineSprite:markDirty() end
-  end
-
-  -- during reeling, move bobber toward rod based on fishDistance
-  if self.state == "reeling" and self.bobber then
-    self:_moveBobberTowardRod(1.0 - self.fishDistance)
-  end
-
   -- HUD overlays
   if self.state == "casting" then
     self:_drawPowerBar()
@@ -399,25 +402,6 @@ function GameplayScene:_drawPowerBar()
   gfx.setColor(gfx.kColorBlack); gfx.drawRect(x-2, y-2, w+4, h+4)
   gfx.fillRect(x, y, math.floor(w * self.power), h)
   gfx.drawTextAligned("Power", x + w/2, y - 12, kTextAlignment.center)
-end
-
--- SIMPLE STRAIGHT LINE between rod tip and bobber
-function GameplayScene:_drawSimpleLine()
-  if not self.bobber then return end
-  local x0, y0 = DOCK_X + ROD_TIP_OFFSET_X, DOCK_Y + ROD_TIP_OFFSET_Y
-  local x1, y1 = self.bobber.x, self.bobber.y
-
-  -- only show during active fishing phases
-  if self.state ~= "waiting" and self.state ~= "hooking" and self.state ~= "reeling" then
-    return
-  end
-
-  -- draw a crisp black line (rounded to integer coords)
-  local ax, ay = math.floor(x0 + 0.5), math.floor(y0 + 0.5)
-  local bx, by = math.floor(x1 + 0.5), math.floor(y1 + 0.5)
-
-  gfx.setColor(gfx.kColorBlack)
-  gfx.drawLine(ax, ay, bx, by)
 end
 
 function GameplayScene:_drawTensionAndDistance()

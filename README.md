@@ -17,6 +17,9 @@ ripples for something on the line?
 - sprite with nothing on the end?
 
 
+- owl will alert when something is on the fishing line!
+
+
 
 # Playdate Template
 This template will help you set up everything you need to start making a game for the Playdate. We will be creating a development environment to make a Playdate game in Lua using Visual Studio Code. Sets up automated builds, autocomplete, and debugging. Works for Windows, Mac, and Linux.
