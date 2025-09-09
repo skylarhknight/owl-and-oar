@@ -41,7 +41,7 @@ local FISH = {
   {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.35, pattern="jerky",  desc="It opened itself. That’s the problem."},
   {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=1.00, pattern="spiky",  desc="Glitched teeth with a byte. Handle carefully."},
   {name="Space Jelly",   rarity="Rare",   size={7,12},  strength=0.25, pattern="quick",  desc="Soft, glowy, and probably extraterrestrial."},
-  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. Claims royalty."},
+  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. Claims royalty. Nepo babies man..."},
 }
 local RARITY_WEIGHT = { Common = 0.60, Medium = 0.30, Rare = 0.10 }
 
