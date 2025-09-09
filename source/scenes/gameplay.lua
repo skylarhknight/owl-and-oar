@@ -10,7 +10,9 @@ GameplayScene.__index = GameplayScene
 
 -- screen & layout
 local SCREEN_W, SCREEN_H = 400, 240
-local DOCK_X, DOCK_Y = 200, 70          -- player sprite center (tweak to your art)
+local DOCK_X, DOCK_Y = 100, 137
+local OWL_X, OWL_Y = 189, 110
+-- 165, 120 for first poll
 
 -- optional fonts (auto-fallback to system font)
 local FONT_TITLE = gfx.font.new("fonts/title")
@@ -51,15 +53,12 @@ local function slugify(name)
 end
 
 local function pickFish()
-  -- rarity by weight
   local r = math.random()
   local chosen = (r <= RARITY_WEIGHT.Common) and "Common"
               or (r <= RARITY_WEIGHT.Common + RARITY_WEIGHT.Medium) and "Medium" or "Rare"
-  -- pool
   local pool = {}
   for _, f in ipairs(FISH) do if f.rarity == chosen then table.insert(pool, f) end end
   local fish = pool[math.random(#pool)]
-  -- size roll
   local minS, maxS = fish.size[1], fish.size[2]
   local sz = math.random(minS, maxS)
   return {
@@ -96,6 +95,17 @@ function GameplayScene.new(manager)
   s.player:setZIndex(10)
   s.player:add()
 
+  -- OWL (neutral/alert)
+  s.owlImgs = {
+    neutral = gfx.image.new("images/owl_neutral"),
+    alert   = gfx.image.new("images/owl_alert"),
+  }
+  s.owl = gfx.sprite.new(s.owlImgs.neutral or gfx.image.new("images/owl_neutral"))
+  s.owl:moveTo(OWL_X, OWL_Y)
+  s.owl:setZIndex(25)  -- above player
+  s.owl:add()
+  s.owlAlertTimer = nil
+
   -- state
   s.state = "idle"              -- idle | casting | waiting | hooking | reeling | catch_card | notice_card
   s.power = 0                   -- 0..1
@@ -118,11 +128,9 @@ function GameplayScene.new(manager)
   -- UI text
   s.statusText = nil
 
-  -- catch card data
-  s.catchInfo = nil   -- table for caught fish
-
-  -- notice card data
-  s.noticeText = nil  -- string for snapped, etc.
+  -- catch/notice card data
+  s.catchInfo = nil
+  s.noticeText = nil
 
   -- icon cache
   s.iconCache = {}
@@ -163,6 +171,33 @@ function GameplayScene:_setPose(which)
   end
 end
 
+function GameplayScene:_setOwlPose(which)
+  if not self.owl or not self.owlImgs then return end
+  local img = self.owlImgs[which]
+  if not img then return end
+  if self.owl.setImage then
+    self.owl:setImage(img)
+  else
+    local x, y = self.owl.x, self.owl.y
+    local z = self.owl:getZIndex()
+    self.owl:remove()
+    self.owl = gfx.sprite.new(img)
+    self.owl:moveTo(x, y)
+    self.owl:setZIndex(z or 25)
+    self.owl:add()
+  end
+end
+
+function GameplayScene:_owlFlashAlert(ms)
+  ms = ms or 5000
+  self:_setOwlPose("alert")
+  if self.owlAlertTimer then self.owlAlertTimer:remove() end
+  self.owlAlertTimer = playdate.timer.new(ms, function()
+    self:_setOwlPose("neutral")
+    self.owlAlertTimer = nil
+  end)
+end
+
 function GameplayScene:_clearTimers()
   if self.biteTimer then self.biteTimer:remove(); self.biteTimer = nil end
   if self.hookWindowTimer then self.hookWindowTimer:remove(); self.hookWindowTimer = nil end
@@ -184,7 +219,6 @@ function GameplayScene:_startCasting()
 end
 
 function GameplayScene:_releaseCast()
-  -- choose fish and schedule bite
   self:_choosePendingFish()
   local baseMs = math.random(1000, 6000) -- 1–6 s
   local rarityAdd = (self.pendingFish.rarity == "Rare" and 700)
@@ -200,8 +234,8 @@ function GameplayScene:_triggerBite()
   if self.state ~= "waiting" then return end
   self.state = "hooking"
 
-  -- Optional owl cue
-  if self._owlFlashAlert then self:_owlFlashAlert(1000) end
+  -- OWL alert for ~1s
+  self:_owlFlashAlert(1000)
 
   local window = math.random(500, 1000)
   if self.pendingFish.rarity == "Rare" then window = math.floor(window * 0.8) end
@@ -222,26 +256,24 @@ function GameplayScene:_hookFish()
   self:_setPose("reel")
 end
 
--- SNAP → immediate neutral + notice popup
+-- SNAP → immediate neutral + notice popup (and owl back to neutral)
 function GameplayScene:_snapLine()
-  -- cleanup cast and show notice card
   self:_clearTimers()
   self.pendingFish = nil
   self.currentFish = nil
   self.tension = 0
   self.fishDistance = 0
   self:_setPose("neutral")
+  self:_setOwlPose("neutral")
 
   self.noticeText = "Line snapped!\nEase off when the meter is high."
   self.state = "notice_card"
-
-  -- auto-dismiss after 1.6s (also closable with A)
   self.noticeCardTimer = playdate.timer.new(1600, function()
     if self.state == "notice_card" then self:_closeNoticeCard() end
   end)
 end
 
--- CAUGHT → immediate neutral + caught popup
+-- CAUGHT → immediate neutral + caught popup (and owl back to neutral)
 function GameplayScene:_finishCatch()
   self:_clearTimers()
   local info = self.currentFish or pickFish()
@@ -252,6 +284,7 @@ function GameplayScene:_finishCatch()
 
   self.catchInfo = info
   self:_setPose("neutral")
+  self:_setOwlPose("neutral")
 
   self.state = "catch_card"
   self.catchCardTimer = playdate.timer.new(1800, function()
@@ -264,6 +297,7 @@ function GameplayScene:_closeCatchCard()
   self.catchInfo = nil
   self.state = "idle"
   self:_setPose("neutral")
+  self:_setOwlPose("neutral")
 end
 
 function GameplayScene:_closeNoticeCard()
@@ -271,6 +305,7 @@ function GameplayScene:_closeNoticeCard()
   self.noticeText = nil
   self.state = "idle"
   self:_setPose("neutral")
+  self:_setOwlPose("neutral")
 end
 
 -- ends a cast, back to idle (miss, or manual cancel from waiting)
@@ -280,6 +315,7 @@ function GameplayScene:_endCast(msg)
   self.pendingFish = nil
   self.currentFish = nil
   self:_setPose("neutral")
+  self:_setOwlPose("neutral")
   self.tension = 0
   if msg then
     self.statusText = msg
@@ -480,20 +516,16 @@ function GameplayScene:_drawTensionMeter()
   local w, h = 120, 10
   local danger = 0.8
 
-  -- frame
   gfx.setColor(gfx.kColorWhite); gfx.fillRect(x-2, y-2, w+4, h+4)
   gfx.setColor(gfx.kColorBlack); gfx.drawRect(x-2, y-2, w+4, h+4)
 
-  -- fill bar
   local fill = math.floor(w * self.tension)
   gfx.fillRect(x, y, fill, h)
 
-  -- danger tick mark at 80%
   local dx = x + math.floor(w * danger)
   gfx.drawLine(dx, y-3, dx, y+h+3)
 
   gfx.drawText("Tension", x, y + h + 4)
-
   if self.tension >= 0.95 then
     gfx.drawText("!", x + w + 8, y - 2)
   end
@@ -529,7 +561,6 @@ function GameplayScene:_drawCaughtCard(info)
     gfx.drawTextAligned(desc,  cx, y + 34, kTextAlignment.center)
   end)
 
-  -- icon (optional)
   local iconSize, icon = 24, self:_getIconBySlug(info.iconSlug, 24)
   if icon then
     local iw, ih = icon:getSize()
