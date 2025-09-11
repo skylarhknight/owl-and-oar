@@ -25,6 +25,7 @@ function playdate.update()
   end
   gfx.sprite.update()
   playdate.timer.updateTimers()
+  SceneManager.current:update()
 end
 
 -- Route A button presses to the current scene
