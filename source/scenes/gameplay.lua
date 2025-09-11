@@ -124,6 +124,7 @@ function GameplayScene.new(manager)
 
   -- tension band (player must stay between lo..hi)
   s.tensionBand = { lo = 0.35, hi = 0.65 }  -- default; gets tightened per fish on hook
+  s.band = { center = 0.5, width = 0.30, amp = 0.05, freq = 1.2, phase = 0.0 }
 
 
   -- bucket (caught fish list)
@@ -264,6 +265,38 @@ function GameplayScene:_hookFish()
   self.fishDistance = 1.0
   self.tension = 0.0
   self.fightTime = 0.0
+
+  -- === Configure drifting tension band based on fish ===
+  local strength = self.currentFish.strength or 0.5
+
+  -- Base width: tougher fish → narrower band
+  local baseWidth = 0.30 - 0.12 * strength      -- 0.30 (easy) → 0.18 (hard)
+  baseWidth = clamp(baseWidth, 0.12, 0.30)       -- never razor-thin
+
+  -- Drift amplitude: tougher fish → bigger sway (but capped)
+  local amp = 0.04 + 0.04 * strength            -- 0.04 → 0.12 0.4 MULT 
+  amp = math.min(0.18, amp)
+
+  -- Drift frequency by pattern (how “jittery” the band moves)
+  local freqByPattern = {
+    steady = 0.6, gentle = 0.9, calm = 0.5,
+    jerky = 1.6,  bursty = 1.2, rhythm = 1.0,
+    quick = 2.0,  spiky  = 1.8
+  }
+  local freq = freqByPattern[self.currentFish.pattern or "steady"] or 1.0
+
+  -- Save base (center drifts around 0.5 by default)
+  self.band.center = clamp(0.5 + (math.random()-0.5)*0.2, 0.35, 0.65) -- ±0.1 wiggle, kept sensible
+  self.band.width  = baseWidth
+  self.band.amp    = amp
+  self.band.freq   = freq
+  self.band.phase  = math.random() * math.pi * 2
+
+  -- Initialize lo/hi from base (no drift yet)
+  local half = baseWidth * 0.5
+  self.tensionBand.lo = clamp(self.band.center - half, 0.05, 0.95)
+  self.tensionBand.hi = clamp(self.band.center + half, 0.05, 0.95)
+
   self.state = "reeling"
   self:_setPose("reel")
 
@@ -460,10 +493,38 @@ function GameplayScene:_fishPullValue(dt)
   end
 end
 
+function GameplayScene:_updateTensionBand()
+  -- Drift the band center with a sine over fight time
+  local c   = self.band.center
+  local w   = self.band.width
+  local amp = self.band.amp
+  local f   = self.band.freq
+  local ph  = self.band.phase
+
+  local drift = amp * math.sin(self.fightTime * f + ph)
+  local newC  = clamp(c + drift, 0.10, 0.90)   -- keep center away from edges
+  local half  = w * 0.5
+
+  local lo = newC - half
+  local hi = newC + half
+
+  -- Keep within a soft 5% margin; maintain width if clamped
+  if lo < 0.05 then
+    lo = 0.05; hi = lo + w
+  elseif hi > 0.95 then
+    hi = 0.95; lo = hi - w
+  end
+
+  self.tensionBand.lo = clamp(lo, 0, 1)
+  self.tensionBand.hi = clamp(hi, 0, 1)
+end
+
+
 ----------------------------------------------------------------
 -- Reeling/tension update (per frame while reeling)
 ----------------------------------------------------------------
 function GameplayScene:_updateReeling(dt)
+  self:_updateTensionBand()
   local dAngle = playdate.getCrankChange() or 0
   local reelSpeed = math.abs(dAngle) / 90          -- ~1.0 per quarter turn/frame
   local fishPull = self:_fishPullValue(dt)         -- 0..1
@@ -686,8 +747,8 @@ function GameplayScene:_drawCaughtCard(info)
     icon:draw(drawX, drawY)
   end
 
-  gfx.drawTextAligned("A to close", cx, y + h - 14, kTextAlignment.center)
-end
+  -- gfx.drawTextAligned("A to close", cx, y + h - 14, kTextAlignment.center)
+  end
 
 function GameplayScene:_drawNoticeCard(text)
   local w, h = 200, 90
