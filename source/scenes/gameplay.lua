@@ -551,7 +551,7 @@ function GameplayScene:_updateReeling(dt)
   -- new base (harder): 0.015 instead of 0.035
   ----------------------------------------------------------------
   local effectiveness = lerp(1.0, 0.4, fishPull)
-  local baseGain = (reelSpeed * 0.015 * effectiveness) * dt * 50
+  local baseGain = (reelSpeed * 0.020 * effectiveness) * dt * 50
 
   -- Band logic
   local lo, hi = self.tensionBand.lo, self.tensionBand.hi
