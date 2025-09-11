@@ -27,20 +27,20 @@ end
 -- Fish catalog with short descriptions
 ----------------------------------------------------------------
 local FISH = {
-  {name="Bass",          rarity="Common", size={10,18}, strength=0.20, pattern="steady", desc="Reliable river resident with a taste for shiny lures."},
-  {name="Carp",          rarity="Common", size={12,22}, strength=0.30, pattern="gentle", desc="Bottom-feeder philosopher. Slow, steady, contemplative."},
-  {name="Minnow",        rarity="Common", size={2,4},   strength=0.10, pattern="calm",   desc="Tiny but spirited. Blink and you’ll miss it."},
-  {name="Catfish",       rarity="Medium", size={16,30}, strength=0.55, pattern="steady", desc="Whiskered bulldozer. Likes mud, dislikes losing."},
-  {name="Trout",         rarity="Medium", size={12,20}, strength=0.45, pattern="jerky",  desc="Stream acrobat. Slippery, jumpy, proud of it."},
-  {name="Salmon",        rarity="Medium", size={18,32}, strength=0.50, pattern="bursty", desc="Migratory muscle. Built for upstream brawls."},
-  {name="Golden Koi",    rarity="Rare",   size={14,26}, strength=0.90, pattern="rhythm", desc="Regal glitter fish. Prefers tranquil water and applause."},
+  {name="Bass",          rarity="Common", size={10,18}, strength=0.20, pattern="steady", desc="Reliable river resident with \na taste for shiny lures."},
+  {name="Carp",          rarity="Common", size={12,22}, strength=0.30, pattern="gentle", desc="Bottom-feeder philosopher. \nSlow, steady, contemplative."},
+  {name="Minnow",        rarity="Common", size={2,4},   strength=0.10, pattern="calm",   desc="Tiny but spirited. \nBlink and you’ll miss it."},
+  {name="Catfish",       rarity="Medium", size={16,30}, strength=0.55, pattern="steady", desc="Whiskered bulldozer. \nLikes mud, dislikes losing."},
+  {name="Trout",         rarity="Medium", size={12,20}, strength=0.45, pattern="jerky",  desc="Stream acrobat. \nSlippery, jumpy, proud of it."},
+  {name="Salmon",        rarity="Medium", size={18,32}, strength=0.50, pattern="bursty", desc="Migratory muscle. \nBuilt for upstream brawls."},
+  {name="Golden Koi",    rarity="Rare",   size={14,26}, strength=0.90, pattern="rhythm", desc="Regal glitter fish. \nPrefers tranquil water and applause."},
   {name="Ghost Fish",    rarity="Rare",   size={10,18}, strength=0.65, pattern="quick",  desc="You didn’t see it… but it saw you."},
   {name="Flying Fish",   rarity="Rare",   size={8,14},  strength=0.40, pattern="bursty", desc="Part fish, part rumor. Catches air and attitudes."},
-  {name="Boot Fish",     rarity="Common", size={8,8},   strength=0.15, pattern="calm",   desc="Just a soggy boot pretending to be a fish. Still counts!"},
+  {name="Boot Fish",     rarity="Common", size={8,8},   strength=0.15, pattern="calm",   desc="Just a soggy boot pretending\n to be a fish. Still counts!"},
   {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.35, pattern="jerky",  desc="It opened itself. That’s the problem."},
-  {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=1.00, pattern="spiky",  desc="Glitched teeth with a byte. Handle carefully."},
+  {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=1.00, pattern="spiky",  desc="Glitched teeth with a byte.\n Handle carefully."},
   {name="Space Jelly",   rarity="Rare",   size={7,12},  strength=0.25, pattern="quick",  desc="Soft, glowy, and probably extraterrestrial."},
-  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. Claims royalty. Nepo babies man..."},
+  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. Claims royalty. \nNepo babies man..."},
 }
 local RARITY_WEIGHT = { Common = 0.60, Medium = 0.30, Rare = 0.10 }
 
@@ -274,7 +274,7 @@ function GameplayScene:_hookFish()
   baseWidth = clamp(baseWidth, 0.12, 0.30)       -- never razor-thin
 
   -- Drift amplitude: tougher fish → bigger sway (but capped)
-  local amp = 0.04 + 0.04 * strength            -- 0.04 → 0.12 0.4 MULT 
+  local amp = 0.04 + 0.08 * strength            -- 0.04 → 0.12 
   amp = math.min(0.18, amp)
 
   -- Drift frequency by pattern (how “jittery” the band moves)
@@ -320,7 +320,7 @@ function GameplayScene:_snapLine()
   self:_setPose("neutral")
   self:_setOwlPose("neutral")
 
-  self.noticeText = "The line snapped!"
+  -- self.noticeText = "The line snapped!"
   self.state = "notice_card"
 
   print("Line snapped!")
