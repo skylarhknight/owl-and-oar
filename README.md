@@ -3,14 +3,14 @@
 A fishing sim for Playdate. Press A to cast your line, wait for the owl to hoot, then press A again to hook your catch! Use the reel to reel in your fish. Avoid reeling in too fast or you might lose your catch!
 
 ## Overview
-* Core loop: Cast → Wait → Hook → Reel → Catch/Snap → Repeat
+* **Core loop**: Cast → Wait → Hook → Reel → Catch/Snap → Repeat
 * Crank-first gameplay: Charge cast power and reel with the crank.
-* Feedback:
-  * Owl cue: Owl switches to an alert pose briefly when there’s a bite.
-  * Tension meter: Fill bar shows line stress (snap at max).
-  * Reel-In bar: Progress toward landing the fish.
-  * Cards: Catch card (“YOU CAUGHT A …”) or Snap card (“LINE SNAPPED!”).
-* Fish variety: Common to rare fish with personality-filled descriptions.
+* **Feedback**:
+  * **Owl cue**: Owl switches to an alert pose briefly when there’s a bite.
+  * **Tension meter**: Fill bar shows line stress (snap at max).
+  * **Reel-In bar**: Progress toward landing the fish.
+  * **Cards**: Catch card (“YOU CAUGHT A …”) or Snap card (“LINE SNAPPED!”).
+* **Fish variety**: Common to rare fish with personality-filled descriptions. Fish also vary in difficulty to catch, with certain attributes (ex. strength, rarity, movement patterns) affecting how challenging they are to reel in.
 
 ## Controls
 **A Button**
