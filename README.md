@@ -12,6 +12,9 @@ A fishing sim for Playdate. Press A to cast your line, wait for the owl to hoot,
   * **Cards**: Catch card (“YOU CAUGHT A …”) or Snap card (“LINE SNAPPED!”).
 * **Fish variety**: Common to rare fish with personality-filled descriptions. Fish also vary in difficulty to catch, with certain attributes (ex. strength, rarity, movement patterns) affecting how challenging they are to reel in.
 
+<img width="1800" height="1200" alt="fishes" src="https://github.com/user-attachments/assets/ba585138-d570-430c-9a65-27122940a1e7" />
+
+
 ## Controls
 **A Button**
 * Idle → Start Casting (begin charging power with the crank).
@@ -31,4 +34,5 @@ A fishing sim for Playdate. Press A to cast your line, wait for the owl to hoot,
 **Visual Cues**
 * **Owl**: Flashes to alert for ~1s when a fish bites (press B!).
 * **Tension Meter**: Visible only while Reeling.
+
 * **Reel-In Bar**: Shows progress toward landing the fish.
