@@ -37,3 +37,11 @@ A fishing sim for Playdate. Press A to cast your line, wait for the owl to hoot,
 
 * **Reel-In Bar**: Shows progress toward landing the fish.
 
+
+
+
+instructions:
+first screen: control
+second screen: how to cast
+third: how to reel in
+maybe fourth :bucket

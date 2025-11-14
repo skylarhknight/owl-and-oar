@@ -4,7 +4,7 @@ import "CoreLibs/timer"
 
 import "scenes/title"
 import "scenes/instructions"
-import "scenes/instructions2"
+import "scenes/gameplay"
 
 local gfx = playdate.graphics
 
