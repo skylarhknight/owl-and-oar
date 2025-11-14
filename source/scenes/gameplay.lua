@@ -1,4 +1,3 @@
--- gameplay.lua
 import "CoreLibs/graphics"
 import "CoreLibs/sprites"
 import "CoreLibs/timer"
@@ -27,25 +26,25 @@ end
 -- Fish catalog with short descriptions
 ----------------------------------------------------------------
 local FISH = {
-  {name="Bass",          rarity="Common", size={10,18}, strength=0.20, pattern="steady", desc="Reliable river resident with \na taste for shiny lures."},
+  {name="Bass",          rarity="Common", size={10,18}, strength=0.20, pattern="steady", desc="Reliable river resident. \nLoves shiny lures."},
   {name="Carp",          rarity="Common", size={12,22}, strength=0.30, pattern="gentle", desc="Bottom-feeder philosopher. \nSlow, steady, contemplative."},
   {name="Minnow",        rarity="Common", size={2,4},   strength=0.10, pattern="calm",   desc="Tiny but spirited. \nBlink and you’ll miss it."},
   {name="Catfish",       rarity="Medium", size={16,30}, strength=0.55, pattern="steady", desc="Whiskered bulldozer. \nLikes mud, dislikes losing."},
   {name="Trout",         rarity="Medium", size={12,20}, strength=0.45, pattern="jerky",  desc="Stream acrobat. \nSlippery, jumpy, proud of it."},
   {name="Salmon",        rarity="Medium", size={18,32}, strength=0.50, pattern="bursty", desc="Migratory muscle. \nBuilt for upstream brawls."},
   {name="Golden Koi",    rarity="Rare",   size={14,26}, strength=0.90, pattern="rhythm", desc="Regal glitter fish. \nPrefers tranquil water and applause."},
-  {name="Ghost Fish",    rarity="Rare",   size={10,18}, strength=0.65, pattern="quick",  desc="You didn’t see it… but it saw you."},
-  {name="Flying Fish",   rarity="Rare",   size={8,14},  strength=0.40, pattern="bursty", desc="Part fish, part rumor. Catches air and attitudes."},
-  {name="Boot Fish",     rarity="Common", size={8,8},   strength=0.15, pattern="calm",   desc="Just a soggy boot pretending\n to be a fish. Still counts!"},
-  {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.35, pattern="jerky",  desc="It opened itself. That’s the problem."},
-  {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=1.00, pattern="spiky",  desc="Glitched teeth with a byte.\n Handle carefully."},
-  {name="Space Jelly",   rarity="Rare",   size={7,12},  strength=0.25, pattern="quick",  desc="Soft, glowy, and probably extraterrestrial."},
-  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. Claims royalty. \nNepo babies man..."},
+  {name="Ghost Fish",    rarity="Rare",   size={10,18}, strength=0.65, pattern="quick",  desc="You didn’t see it… \nbut it saw you."},
+  {name="Flying Fish",   rarity="Rare",   size={8,14},  strength=0.40, pattern="bursty", desc="Part fish, part rumor. \nCatches air and attitudes."},
+  {name="Boot Fish",     rarity="Common", size={8,8},   strength=0.15, pattern="calm",   desc="Just a soggy boot pretending\nto be a fish. Still counts!"},
+  {name="Can O' Worms",  rarity="Medium", size={4,6},   strength=0.35, pattern="jerky",  desc="It opened itself. \nThat’s the problem."},
+  {name="Pixel Piranha", rarity="Rare",   size={6,9},   strength=1.00, pattern="spiky",  desc="Glitched teeth with a byte.\nHandle carefully."},
+  {name="Space Jelly",   rarity="Rare",   size={7,12},  strength=0.25, pattern="quick",  desc="Soft, glowy, and probably \nextraterrestrial."},
+  {name="Kraken Jr.",    rarity="Medium", size={5,10},  strength=0.70, pattern="bursty", desc="Tiny tentacles, big ego. \nClaims royalty."},
 }
 local RARITY_WEIGHT = { Common = 0.60, Medium = 0.30, Rare = 0.10 }
 
 -- utils
-local function clamp(v, a, b) if v<a then return a elseif v>b then return b else return v end end
+local function clamp(v, a, b) if v<a then return a elseif v>b then return v end return v end
 local function lerp(a,b,t) return a + (b-a)*t end
 local function slugify(name)
   return (name:lower():gsub("[^%w]+","_"):gsub("^_+",""):gsub("_+$",""):gsub("_+","_"))
@@ -123,9 +122,8 @@ function GameplayScene.new(manager)
   s._lastFrameTime = playdate.getCurrentTimeMilliseconds()
 
   -- tension band (player must stay between lo..hi)
-  s.tensionBand = { lo = 0.35, hi = 0.65 }  -- default; gets tightened per fish on hook
+  s.tensionBand = { lo = 0.35, hi = 0.65 }
   s.band = { center = 0.5, width = 0.30, amp = 0.05, freq = 1.2, phase = 0.0 }
-
 
   -- bucket (caught fish list)
   s.bucket = {}
@@ -136,6 +134,7 @@ function GameplayScene.new(manager)
   -- popup card data
   s.catchInfo = nil
   s.noticeText = nil
+  s.snapCard = nil      -- true when showing "the line snapped!" card
 
   -- icon cache
   s.iconCache = {}
@@ -194,7 +193,7 @@ function GameplayScene:_setOwlPose(which)
 end
 
 function GameplayScene:_owlFlashAlert(ms)
-  ms = ms or 4000 -- spec: 2 seconds
+  ms = ms or 4000
   self:_setOwlPose("alert")
   if self.owlAlertTimer then self.owlAlertTimer:remove() end
   self.owlAlertTimer = playdate.timer.new(ms, function()
@@ -215,16 +214,13 @@ end
 -- Casting / Bites
 ----------------------------------------------------------------
 function GameplayScene:_castLine()
-  -- Enter "player fishing" state (waiting for bite)
   self:_setPose("fish")
   self.state = "waiting"
 
-  -- choose a pending fish immediately (rarity-proportional)
   self.pendingFish = pickFish()
   print("Casting... waiting for a " .. (self.pendingFish and self.pendingFish.name or "fish") .. "...")
 
-  -- time-to-bite: random base with slight rarity bias
-  local baseMs = math.random(2500, 9000) -- 1.2–6.0 s
+  local baseMs = math.random(2500, 9000)
   local rarityAdd = (self.pendingFish.rarity == "Rare" and 1600)
                  or (self.pendingFish.rarity == "Medium" and 800) or 0
   local waitMs = baseMs + rarityAdd
@@ -238,10 +234,8 @@ function GameplayScene:_triggerBite()
 
   print((self.pendingFish and self.pendingFish.name or "A fish") .. " is biting!")
 
-  -- owl alert for 2s per spec
   self:_owlFlashAlert(2000)
 
-  -- fish stays on line for random 1–5s, varied slightly by rarity/pattern
   local minMs, maxMs = 1000, 5000
   if self.pendingFish.rarity == "Rare" then
     maxMs = 3000
@@ -250,7 +244,6 @@ function GameplayScene:_triggerBite()
   end
   local window = math.random(minMs, maxMs)
 
-  -- patterns that are "quick" reduce the linger window a bit
   if self.pendingFish.pattern == "quick" then window = math.floor(window * 0.8) end
 
   self.hookWindowTimer = playdate.timer.new(window, function()
@@ -266,18 +259,14 @@ function GameplayScene:_hookFish()
   self.tension = 0.0
   self.fightTime = 0.0
 
-  -- === Configure drifting tension band based on fish ===
+  -- configure drifting tension band
   local strength = self.currentFish.strength or 0.5
+  local baseWidth = 0.30 - 0.12 * strength
+  baseWidth = clamp(baseWidth, 0.12, 0.30)
 
-  -- Base width: tougher fish → narrower band
-  local baseWidth = 0.30 - 0.12 * strength      -- 0.30 (easy) → 0.18 (hard)
-  baseWidth = clamp(baseWidth, 0.12, 0.30)       -- never razor-thin
-
-  -- Drift amplitude: tougher fish → bigger sway (but capped)
-  local amp = 0.04 + 0.08 * strength            -- 0.04 → 0.12 
+  local amp = 0.04 + 0.08 * strength
   amp = math.min(0.18, amp)
 
-  -- Drift frequency by pattern (how “jittery” the band moves)
   local freqByPattern = {
     steady = 0.6, gentle = 0.9, calm = 0.5,
     jerky = 1.6,  bursty = 1.2, rhythm = 1.0,
@@ -285,14 +274,12 @@ function GameplayScene:_hookFish()
   }
   local freq = freqByPattern[self.currentFish.pattern or "steady"] or 1.0
 
-  -- Save base (center drifts around 0.5 by default)
-  self.band.center = clamp(0.5 + (math.random()-0.5)*0.2, 0.35, 0.65) -- ±0.1 wiggle, kept sensible
+  self.band.center = clamp(0.5 + (math.random()-0.5)*0.2, 0.35, 0.65)
   self.band.width  = baseWidth
   self.band.amp    = amp
   self.band.freq   = freq
   self.band.phase  = math.random() * math.pi * 2
 
-  -- Initialize lo/hi from base (no drift yet)
   local half = baseWidth * 0.5
   self.tensionBand.lo = clamp(self.band.center - half, 0.05, 0.95)
   self.tensionBand.hi = clamp(self.band.center + half, 0.05, 0.95)
@@ -300,9 +287,6 @@ function GameplayScene:_hookFish()
   self.state = "reeling"
   self:_setPose("reel")
 
-  -- Make the band tighter for stronger/rarer fish
-  local strength = self.currentFish.strength or 0.5
-  -- Max tighten ~0.12 on each side at strength=1.0
   local tighten = math.min(0.12, 0.12 * strength)
   self.tensionBand.lo = 0.35 + tighten
   self.tensionBand.hi = 0.65 - tighten
@@ -310,18 +294,27 @@ function GameplayScene:_hookFish()
   print("Hooked a " .. (self.currentFish and self.currentFish.name or "fish") .. "!")
 end
 
--- SNAP → immediate neutral + notice popup
+-- SNAP → neutral + SNAP catch card ("the line snapped!")
 function GameplayScene:_snapLine()
   self:_clearTimers()
   self.pendingFish = nil
   self.currentFish = nil
   self.tension = 0
   self.fishDistance = 0
+
+  self.snapCard = true
+  self.catchInfo = nil      -- no fish info; this is a snap card
   self:_setPose("neutral")
   self:_setOwlPose("neutral")
 
-  -- self.noticeText = "The line snapped!"
-  self.state = "notice_card"
+  self.state = "catch_card"
+
+  -- auto-close after ~1.6s (also closable with A)
+  self.catchCardTimer = playdate.timer.new(1600, function()
+    if self.state == "catch_card" and self.snapCard then
+      self:_closeCatchCard()
+    end
+  end)
 
   print("Line snapped!")
 end
@@ -333,7 +326,6 @@ function GameplayScene:_finishCatch()
 
   print("Caught a " .. (info.name or "fish") .. "!")
 
-  -- save to bucket
   table.insert(self.bucket, {
     name = info.name,
     rarity = info.rarity,
@@ -347,6 +339,7 @@ function GameplayScene:_finishCatch()
   self.tension = 0
   self.fishDistance = 0
 
+  self.snapCard = nil
   self.catchInfo = info
   self:_setPose("neutral")
   self:_setOwlPose("neutral")
@@ -355,7 +348,12 @@ function GameplayScene:_finishCatch()
 end
 
 function GameplayScene:_closeCatchCard()
+  if self.catchCardTimer then
+    self.catchCardTimer:remove()
+    self.catchCardTimer = nil
+  end
   self.catchInfo = nil
+  self.snapCard = nil
   self.state = "idle"
   self:_setPose("neutral")
   self:_setOwlPose("neutral")
@@ -381,7 +379,6 @@ function GameplayScene:_endCast(msg)
     self.statusText = msg
     playdate.timer.new(1000, function() self.statusText = nil end)
   end
-
   print("Ending cast...")
 end
 
@@ -396,8 +393,8 @@ function GameplayScene:_getIconBySlug(slug, box)
   if self.iconCache[key] ~= nil then return self.iconCache[key] end
 
   local candidates = {
-    "images/fish/icons/" .. slug,  -- preferred tiny icon
-    "images/fish/"       .. slug,  -- fallback big art
+    "images/fish/icons/" .. slug,
+    "images/fish/"       .. slug,
   }
 
   local img = nil
@@ -425,17 +422,14 @@ function GameplayScene:_getIconBySlug(slug, box)
 end
 
 ----------------------------------------------------------------
--- INPUT (per spec)
+-- INPUT
 ----------------------------------------------------------------
 function GameplayScene:AButtonDown()
   if self.state == "idle" then
-    -- Neutral → cast line (player fishing)
     self:_castLine()
   elseif self.state == "waiting" then
-    -- Player fishing (no fish yet) → return to neutral
     self:_endCast("Reeled back empty.")
   elseif self.state == "hooking" then
-    -- Fish on the line → HOOK (enter reeling)
     if self.hookWindowTimer then self.hookWindowTimer:remove(); self.hookWindowTimer = nil end
     self:_hookFish()
   elseif self.state == "catch_card" then
@@ -443,7 +437,7 @@ function GameplayScene:AButtonDown()
   elseif self.state == "notice_card" then
     self:_closeNoticeCard()
   elseif self.state == "bucket" then
-    -- Do nothing (B closes bucket)
+    -- bucket stays open until B
   end
 end
 
@@ -454,8 +448,6 @@ function GameplayScene:BButtonDown()
     self.state = "idle"
   end
 end
-
--- (No power charging; crank is used only while reeling.)
 
 ----------------------------------------------------------------
 -- Fight model helpers (fishPull 0..1)
@@ -494,7 +486,6 @@ function GameplayScene:_fishPullValue(dt)
 end
 
 function GameplayScene:_updateTensionBand()
-  -- Drift the band center with a sine over fight time
   local c   = self.band.center
   local w   = self.band.width
   local amp = self.band.amp
@@ -502,13 +493,12 @@ function GameplayScene:_updateTensionBand()
   local ph  = self.band.phase
 
   local drift = amp * math.sin(self.fightTime * f + ph)
-  local newC  = clamp(c + drift, 0.10, 0.90)   -- keep center away from edges
+  local newC  = clamp(c + drift, 0.10, 0.90)
   local half  = w * 0.5
 
   local lo = newC - half
   local hi = newC + half
 
-  -- Keep within a soft 5% margin; maintain width if clamped
   if lo < 0.05 then
     lo = 0.05; hi = lo + w
   elseif hi > 0.95 then
@@ -519,72 +509,56 @@ function GameplayScene:_updateTensionBand()
   self.tensionBand.hi = clamp(hi, 0, 1)
 end
 
-
 ----------------------------------------------------------------
 -- Reeling/tension update (per frame while reeling)
 ----------------------------------------------------------------
 function GameplayScene:_updateReeling(dt)
   self:_updateTensionBand()
   local dAngle = playdate.getCrankChange() or 0
-  local reelSpeed = math.abs(dAngle) / 90          -- ~1.0 per quarter turn/frame
-  local fishPull = self:_fishPullValue(dt)         -- 0..1
+  local reelSpeed = math.abs(dAngle) / 90
+  local fishPull = self:_fishPullValue(dt)
   local resist   = lerp(0.35, 1.0, fishPull)
   local strength = self.currentFish and self.currentFish.strength or 0.5
 
-  ----------------------------------------------------------------
-  -- TENSION: up when reeling against pull; down when back-cranking or resting
-  ----------------------------------------------------------------
+  -- tension
   if dAngle > 0 then
-    -- a little spicier than before to punish over-reeling
     self.tension = self.tension + (reelSpeed * resist * strength) * dt * 1.35
   elseif dAngle < 0 then
     local relief = (-dAngle / 90) * 0.95
     self.tension = self.tension - relief * dt
   else
-    self.tension = self.tension - 0.22 * dt        -- passive decay when resting
+    self.tension = self.tension - 0.22 * dt
   end
   self.tension = clamp(self.tension, 0, 1)
 
-  ----------------------------------------------------------------
-  -- PROGRESS: much slower base; depends on being inside the band
-  -- old gain ~ (reelSpeed * 0.035 * eff) * dt * 50
-  -- new base (harder): 0.015 instead of 0.035
-  ----------------------------------------------------------------
+  -- progress
   local effectiveness = lerp(1.0, 0.4, fishPull)
   local baseGain = (reelSpeed * 0.020 * effectiveness) * dt * 50
 
-  -- Band logic
   local lo, hi = self.tensionBand.lo, self.tensionBand.hi
   local inBand = (self.tension >= lo and self.tension <= hi)
 
   if dAngle > 0 then
     if inBand then
-      -- Normal (but slower) progress when you’re “in the groove”
       self.fishDistance = clamp(self.fishDistance - baseGain, 0, 1)
     elseif self.tension < lo then
-      -- Too slack: no forward progress; fish pulls away a bit
       local regress = (lo - self.tension) * (0.018 + 0.025 * fishPull) * dt * 50
       self.fishDistance = clamp(self.fishDistance + regress, 0, 1)
     else
-      -- Too tight: tiny progress but big snap risk (tension already rising fast)
       local tiny = baseGain * 0.25
       self.fishDistance = clamp(self.fishDistance - tiny, 0, 1)
-      -- extra pressure the longer you stay above hi
       self.tension = clamp(self.tension + 0.20 * dt, 0, 1)
     end
   elseif dAngle < 0 then
-    -- Letting out line always gives the fish a bit of distance
     local give = (math.abs(dAngle) / 90) * 0.016 * dt * 50
     self.fishDistance = clamp(self.fishDistance + give, 0, 1)
   else
-    -- Pausing: fish can creep away if you’re slack
     if self.tension < lo then
       local creep = (lo - self.tension) * 0.010 * dt * 50
       self.fishDistance = clamp(self.fishDistance + creep, 0, 1)
     end
   end
 
-  -- Fail / Success
   if self.tension >= 1.0 then
     self:_snapLine(); return
   end
@@ -592,7 +566,6 @@ function GameplayScene:_updateReeling(dt)
     self:_finishCatch(); return
   end
 end
-
 
 ----------------------------------------------------------------
 -- Update / Draw
@@ -605,11 +578,8 @@ function GameplayScene:update()
 
   if self.state == "reeling" then
     self:_updateReeling(dt)
-
-    print(string.format("Tension: %.2f  Distance: %.2f", self.tension, self.fishDistance))
   end
 
-  -- HUD overlays per spec
   if self.state == "reeling" then
     self:_drawTensionMeter(nowMs)
     self:_drawReelInBar()
@@ -623,14 +593,15 @@ function GameplayScene:update()
     gfx.drawTextAligned(self.statusText, SCREEN_W/2, 12, kTextAlignment.center)
   end
 
-  if self.state == "catch_card" and self.catchInfo then
+  -- IMPORTANT: draw catch card even if catchInfo is nil (snap card case)
+  if self.state == "catch_card" then
     self:_drawCaughtCard(self.catchInfo)
   elseif self.state == "notice_card" and self.noticeText then
     self:_drawNoticeCard(self.noticeText)
   end
 end
 
--- === TENSION METER (top-right; rails behind; flash near break) ===
+-- === TENSION METER (top-right) ===
 function GameplayScene:_drawTensionMeter(nowMs)
   local w, h = 120, 10
   local x = SCREEN_W - w - 10
@@ -638,24 +609,21 @@ function GameplayScene:_drawTensionMeter(nowMs)
   local danger = 0.85
   local now = nowMs or playdate.getCurrentTimeMilliseconds()
 
-  -- subtle rails behind
+  -- rails
   local spacing = 6
   for i = 0, w, spacing do
     gfx.setColor(gfx.kColorWhite)
     gfx.drawLine(x + i, y, x + i, y + h)
   end
 
-  -- outline
   gfx.setColor(gfx.kColorWhite)
   gfx.drawRect(x-1, y-1, w+2, h+2)
 
-  -- band guides (two vertical lines)
   local loX = x + math.floor(w * clamp(self.tensionBand.lo, 0, 1))
   local hiX = x + math.floor(w * clamp(self.tensionBand.hi, 0, 1))
   gfx.drawLine(loX, y-3, loX, y+h+3)
   gfx.drawLine(hiX, y-3, hiX, y+h+3)
 
-  -- fill for current tension (flash near break)
   local fillW = math.floor(w * clamp(self.tension, 0, 1))
   local shouldFlash = (self.tension >= danger) and ((math.floor(now/120) % 2) == 0)
   if fillW > 0 then
@@ -665,19 +633,16 @@ function GameplayScene:_drawTensionMeter(nowMs)
   end
 end
 
-
--- === REEL IN PROGRESS BAR (bottom-center; white outline + white fill) ===
+-- === REEL IN BAR (bottom-center; white outline + fill) ===
 function GameplayScene:_drawReelInBar()
   local progress = clamp(1.0 - self.fishDistance, 0, 1)
   local w, h = 180, 8
   local x = (SCREEN_W - w) // 2
   local y = SCREEN_H - 22
 
-  -- outline (white 1px)
   gfx.setColor(gfx.kColorWhite)
   gfx.drawRect(x-1, y-1, w+2, h+2)
 
-  -- fill (white)
   local fillW = math.floor(w * progress)
   if fillW > 0 then gfx.fillRect(x, y, fillW, h) end
 end
@@ -688,7 +653,6 @@ function GameplayScene:_drawBucket()
   local x = (SCREEN_W - w) // 2
   local y = (SCREEN_H - h) // 2
 
-  -- panel
   gfx.setColor(gfx.kColorWhite); gfx.fillRect(x, y, w, h)
   gfx.setColor(gfx.kColorBlack); gfx.drawRect(x, y, w, h)
 
@@ -697,7 +661,6 @@ function GameplayScene:_drawBucket()
     gfx.drawTextAligned("BUCKET", cx, y + 8, kTextAlignment.center)
   end)
 
-  -- aggregate counts
   local counts = {}
   for _, f in ipairs(self.bucket) do
     counts[f.name] = (counts[f.name] or 0) + 1
@@ -721,34 +684,47 @@ end
 
 -- === POPUP CARDS ===
 function GameplayScene:_drawCaughtCard(info)
-  local w, h = 220, 118
+  local w, h = 200, 110
   local x = (SCREEN_W - w) // 2
   local y = (SCREEN_H - h) // 2
 
   gfx.setColor(gfx.kColorWhite); gfx.fillRect(x, y, w, h)
   gfx.setColor(gfx.kColorBlack); gfx.drawRect(x, y, w, h)
 
-  local title = "You caught a " .. info.name .. "!"
-  local desc  = info.desc or "One for the bucket."
   local cx = x + w // 2
+
+  -- SNAP CARD
+  if self.snapCard then
+    withFont(FONT_TITLE, function()
+      gfx.drawTextAligned("the line snapped!", cx, y + 20, kTextAlignment.center)
+    end)
+    withFont(FONT_BODY, function()
+      gfx.drawTextAligned("ease off the crank when\n"
+        .. "tension is high.", cx, y + 46, kTextAlignment.center)
+    end)
+    gfx.drawTextAligned("A to close", cx, y + h - 16, kTextAlignment.center)
+    return
+  end
+
+  -- regular catch card (needs info)
+  if not info then return end
+
+  local title = "YOU CAUGHT A " .. string.upper(info.name)
+  local desc  = info.desc or "One for the bucket."
 
   withFont(FONT_TITLE, function()
     gfx.drawTextAligned(title, cx, y + 10, kTextAlignment.center)
   end)
   withFont(FONT_BODY, function()
-    gfx.drawTextAligned(desc,  cx, y + 36, kTextAlignment.center)
+    gfx.drawTextAligned(desc,  cx, y + 34, kTextAlignment.center)
   end)
 
   local icon = self:_getIconBySlug(info.iconSlug, 24)
   if icon then
     local iw, ih = icon:getSize()
-    local drawX = cx - iw//2
-    local drawY = y + h - ih - 20
-    icon:draw(drawX, drawY)
+    icon:draw(cx - iw//2, y + h - ih - 18)
   end
-
-  -- gfx.drawTextAligned("A to close", cx, y + h - 14, kTextAlignment.center)
-  end
+end
 
 function GameplayScene:_drawNoticeCard(text)
   local w, h = 200, 90
