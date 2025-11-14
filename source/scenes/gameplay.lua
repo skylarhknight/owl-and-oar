@@ -194,7 +194,7 @@ function GameplayScene:_setOwlPose(which)
 end
 
 function GameplayScene:_owlFlashAlert(ms)
-  ms = ms or 2000 -- spec: 2 seconds
+  ms = ms or 4000 -- spec: 2 seconds
   self:_setOwlPose("alert")
   if self.owlAlertTimer then self.owlAlertTimer:remove() end
   self.owlAlertTimer = playdate.timer.new(ms, function()
