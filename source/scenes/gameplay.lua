@@ -13,14 +13,14 @@ local SCREEN_W, SCREEN_H = 400, 240
 local DOCK_X, DOCK_Y = 100, 137
 local OWL_X, OWL_Y = 189, 110
 
--- optional fonts (auto-fallback to system font)
+-- fonts
 local FONT_TITLE = gfx.font.new("fonts/title")
 local FONT_BODY  = gfx.font.new("fonts/body")
 local function withFont(font, fn)
-  local prev = gfx.getFont()
-  if font then gfx.setFont(font) end
-  fn()
-  gfx.setFont(prev)
+    local prev = gfx.getFont()
+    gfx.setFont(font)
+    fn()
+    gfx.setFont(prev)
 end
 
 ----------------------------------------------------------------

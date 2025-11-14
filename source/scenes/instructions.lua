@@ -1,5 +1,4 @@
 local gfx = playdate.graphics
-import "scenes/gameplay"
 
 InstructionsScene = {}
 InstructionsScene.__index = InstructionsScene

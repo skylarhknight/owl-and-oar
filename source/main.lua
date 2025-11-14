@@ -10,6 +10,16 @@ local gfx = playdate.graphics
 
 SceneManager = { current = nil }
 
+-- fonts
+local mainFont = gfx.font.new("fonts/body")
+gfx.setFont(mainFont)
+
+local FONT_TITLE = gfx.font.new("fonts/title")
+local FONT_BODY  = gfx.font.new("fonts/body")
+playdate.titleFont = FONT_TITLE
+playdate.bodyFont  = FONT_BODY
+
+
 function SceneManager:change(scene)
   if self.current and self.current.leave then self.current:leave() end
   self.current = scene
