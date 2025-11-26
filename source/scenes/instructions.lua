@@ -33,7 +33,7 @@ end
 function InstructionsScene:AButtonDown()
   if self.page < #self.pages then
     -- go to next instruction image
-    self.page += 1
+    self.page = self.page + 1
   else
     -- finished all pages → go to gameplay
     self.manager:change(GameplayScene.new(self.manager))
